@@ -33,6 +33,9 @@ import java.io.File;
 import java.io.IOException;
 import java.io.Reader;
 import java.io.Writer;
+import java.nio.channels.FileChannel;
+import java.nio.channels.FileLock;
+import java.nio.file.StandardOpenOption;
 import java.util.Collections;
 import java.util.Map;
 
@@ -45,6 +48,8 @@ abstract class MavenMetadata
 {
 
     static final String MAVEN_METADATA_XML = "maven-metadata.xml";
+
+    static final String MAVEN_METADATA_LOCK = "maven-metadata-local.xml.lock";
 
     private final File file;
 
@@ -113,7 +118,15 @@ abstract class MavenMetadata
         throws RepositoryException
     {
         metadataFile.getParentFile().mkdirs();
-        try ( Writer writer = WriterFactory.newXmlWriter( metadataFile ) )
+        File metadataLockFile = new File(metadataFile.getParent(),MAVEN_METADATA_LOCK);
+        try {
+            metadataLockFile.createNewFile();
+        } catch (IOException e) {
+            throw new RepositoryException( "Could not create metadata lock file " + metadataLockFile + ": " + e.getMessage(), e );
+        }
+        try (FileChannel metadataLockFileChannel = FileChannel.open(metadataLockFile.toPath(), StandardOpenOption.WRITE);
+             FileLock metadataLock = metadataLockFileChannel.lock();
+             Writer writer = WriterFactory.newXmlWriter( metadataFile ) )
         {
             new MetadataXpp3Writer().write( writer, metadata );
         }
